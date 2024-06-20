@@ -173,6 +173,37 @@ func GeneratePrometheus(ctx context.Context, logger Logger, windowsRepo AlertWin
 		return err
 	}
 
+	err = writeRules(ctx, logger, result, out)
+	if err != nil {
+		return fmt.Errorf("write rules: %w", err)
+	}
+
+	return nil
+}
+
+func GeneratePrometheusAggregatedBySlothID(ctx context.Context, logger Logger, windowsRepo AlertWindowRepo, disableRecs, disableAlerts bool, extraLabels map[string]string, slos SLOGroup, out io.Writer) error {
+	logger.Infof("Generating from Prometheus spec")
+	info := info.Info{
+		Version: info.Version,
+		Mode:    info.ModeCLIGenPrometheus,
+		Spec:    prometheusv1.Version,
+	}
+
+	wrappedWindowsRepo := alertWindowRepoWrapper{windowsRepo}
+	result, err := generateRulesAggregatedBySlothID(ctx, logger, info, wrappedWindowsRepo, disableRecs, disableAlerts, extraLabels, ToPrometheusSLOGroup(slos))
+	if err != nil {
+		return err
+	}
+
+	err = writeRules(ctx, logger, result, out)
+	if err != nil {
+		return fmt.Errorf("write rules: %w", err)
+	}
+
+	return nil
+}
+
+func writeRules(ctx context.Context, logger Logger, result *generate.Response, out io.Writer) error {
 	repo := prometheus.NewIOWriterGroupedRulesYAMLRepo(out, logger)
 	storageSLOs := make([]prometheus.StorageSLO, 0, len(result.PrometheusSLOs))
 	for _, s := range result.PrometheusSLOs {
@@ -182,15 +213,15 @@ func GeneratePrometheus(ctx context.Context, logger Logger, windowsRepo AlertWin
 		})
 	}
 
-	err = repo.StoreSLOs(ctx, storageSLOs)
+	err := repo.StoreSLOs(ctx, storageSLOs)
 	if err != nil {
-		return fmt.Errorf("could not store SLOS: %w", err)
+		return fmt.Errorf("store SLOs: %w", err)
 	}
 
 	return nil
 }
 
-// generate is the main generator logic that all the spec types and storers share. Mainly
+// generateRules is the main generator logic that all the spec types and storers share. Mainly
 // has the logic of the generate app service.
 func generateRules(ctx context.Context, logger log.Logger, info info.Info, windowsRepo alert.WindowsRepo, disableRecs, disableAlerts, disableOptimizedRules bool, extraLabels map[string]string, slos prometheus.SLOGroup) (*generate.Response, error) {
 	// Disable recording rules if required.
@@ -203,6 +234,46 @@ func generateRules(ctx context.Context, logger log.Logger, info info.Info, windo
 			sliRuleGen = prometheus.SLIRecordingRulesGenerator
 		}
 		metaRuleGen = prometheus.MetadataRecordingRulesGenerator
+	}
+
+	// Disable alert rules if required.
+	var alertRuleGen generate.SLOAlertRulesGenerator = generate.NoopSLOAlertRulesGenerator
+	if !disableAlerts {
+		alertRuleGen = prometheus.SLOAlertRulesGenerator
+	}
+
+	// Generate.
+	controller, err := generate.NewService(generate.ServiceConfig{
+		AlertGenerator:              alert.NewGenerator(windowsRepo),
+		SLIRecordingRulesGenerator:  sliRuleGen,
+		MetaRecordingRulesGenerator: metaRuleGen,
+		SLOAlertRulesGenerator:      alertRuleGen,
+		Logger:                      logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("could not create application service: %w", err)
+	}
+
+	result, err := controller.Generate(ctx, generate.Request{
+		ExtraLabels: extraLabels,
+		Info:        info,
+		SLOGroup:    slos,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("could not generate prometheus rules: %w", err)
+	}
+
+	return result, nil
+}
+
+func generateRulesAggregatedBySlothID(ctx context.Context, logger log.Logger, info info.Info, windowsRepo alert.WindowsRepo, disableRecs, disableAlerts bool, extraLabels map[string]string, slos prometheus.SLOGroup) (*generate.Response, error) {
+	// Disable recording rules if required.
+	var sliRuleGen generate.SLIRecordingRulesGenerator = generate.NoopSLIRecordingRulesGenerator
+	var metaRuleGen generate.MetadataRecordingRulesGenerator = generate.NoopMetadataRecordingRulesGenerator
+	if !disableRecs {
+		// Disable optimized rules if required.
+		sliRuleGen = prometheus.OptimizedBySlothIDSLIRecordingRulesGenerator
+		metaRuleGen = prometheus.MetadataRecordingRulesBySlothIDGenerator
 	}
 
 	// Disable alert rules if required.
