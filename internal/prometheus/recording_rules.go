@@ -230,10 +230,9 @@ func optimizedBySlothIDSLIRecordGenerator(slo SLO, window, shortWindow time.Dura
 	strWindow := timeDurationToPromStr(window)
 	var b bytes.Buffer
 	err = tpl.Execute(&b, map[string]string{
-		"metric":    shortWindowSLIRec,
-		"filter":    slothIDFilter(slo.ID),
-		"window":    strWindow,
-		"windowKey": sloWindowLabelName,
+		"metric": shortWindowSLIRec,
+		"filter": slothIDFilter(slo.ID),
+		"window": strWindow,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("could not render SLI expression template: %w", err)
