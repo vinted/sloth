@@ -166,10 +166,7 @@ func optimizedSLIRecordGenerator(slo SLO, window, shortWindow time.Duration) (*r
 	// that is 1 (thats why we can use `count`), giving use a correct ratio of ratios:
 	// - https://prometheus.io/docs/practices/rules/
 	// - https://math.stackexchange.com/questions/95909/why-is-an-average-of-an-average-usually-incorrect
-	const sliExprTplFmt = `sum_over_time({{.metric}}{{.filter}}[{{.window}}])
-/ ignoring ({{.windowKey}})
-count_over_time({{.metric}}{{.filter}}[{{.window}}])
-`
+	const sliExprTplFmt = `sum_over_time({{.metric}}{{.filter}}[{{.window}}])/43200`
 
 	if window == shortWindow {
 		return nil, fmt.Errorf("can't optimize using the same shortwindow as the window to optimize")
@@ -187,10 +184,9 @@ count_over_time({{.metric}}{{.filter}}[{{.window}}])
 	strWindow := timeDurationToPromStr(window)
 	var b bytes.Buffer
 	err = tpl.Execute(&b, map[string]string{
-		"metric":    shortWindowSLIRec,
-		"filter":    filter,
-		"window":    strWindow,
-		"windowKey": sloWindowLabelName,
+		"metric": shortWindowSLIRec,
+		"filter": filter,
+		"window": strWindow,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("could not render SLI expression template: %w", err)
@@ -217,10 +213,7 @@ func optimizedBySlothIDSLIRecordGenerator(slo SLO, window, shortWindow time.Dura
 	// that is 1 (thats why we can use `count`), giving use a correct ratio of ratios:
 	// - https://prometheus.io/docs/practices/rules/
 	// - https://math.stackexchange.com/questions/95909/why-is-an-average-of-an-average-usually-incorrect
-	const sliExprTplFmt = `sum by (sloth_id) (sum_over_time({{.metric}}{{.filter}}[{{.window}}]))
-/
-sum by (sloth_id) (count_over_time({{.metric}}{{.filter}}[{{.window}}]))
-`
+	const sliExprTplFmt = `sum by (sloth_id) (sum_over_time({{.metric}}{{.filter}}[{{.window}}]))/43200`
 
 	if window == shortWindow {
 		return nil, fmt.Errorf("can't optimize using the same shortwindow as the window to optimize")
@@ -237,10 +230,9 @@ sum by (sloth_id) (count_over_time({{.metric}}{{.filter}}[{{.window}}]))
 	strWindow := timeDurationToPromStr(window)
 	var b bytes.Buffer
 	err = tpl.Execute(&b, map[string]string{
-		"metric":    shortWindowSLIRec,
-		"filter":    slothIDFilter(slo.ID),
-		"window":    strWindow,
-		"windowKey": sloWindowLabelName,
+		"metric": shortWindowSLIRec,
+		"filter": slothIDFilter(slo.ID),
+		"window": strWindow,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("could not render SLI expression template: %w", err)
