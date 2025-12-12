@@ -184,10 +184,9 @@ func optimizedSLIRecordGenerator(slo SLO, window, shortWindow time.Duration) (*r
 	strWindow := timeDurationToPromStr(window)
 	var b bytes.Buffer
 	err = tpl.Execute(&b, map[string]string{
-		"metric":    shortWindowSLIRec,
-		"filter":    filter,
-		"window":    strWindow,
-		"windowKey": sloWindowLabelName,
+		"metric": shortWindowSLIRec,
+		"filter": filter,
+		"window": strWindow,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("could not render SLI expression template: %w", err)
